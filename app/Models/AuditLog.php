@@ -6,9 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class AuditLog extends Model
 {
-    protected $primaryKey = 'log_id';
-    public $incrementing = true;
-    protected $keyType = 'int';
+    // REMOVED incorrect primary key definition
 
     protected $fillable = [
         'action_type',
@@ -17,17 +15,16 @@ class AuditLog extends Model
     ];
 
     protected $casts = [
-        'performed_on' => 'datetime'
+        'created_at' => 'datetime'
     ];
 
-    // Helper Methods
+    // Static helper method
     public static function log($action, $description, $performedBy = null)
     {
         return self::create([
             'action_type' => $action,
             'description' => $description,
             'performed_by' => $performedBy,
-            'performed_on' => now()
         ]);
     }
 }

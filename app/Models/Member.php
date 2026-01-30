@@ -7,9 +7,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Member extends Model
 {
-    protected $primaryKey = 'member_id';
-    public $incrementing = true;
-    protected $keyType = 'int';
+    // REMOVED incorrect primary key definition
 
     protected $fillable = [
         'hrms_user_id',
@@ -29,7 +27,7 @@ class Member extends Model
     // Relationships
     public function circulations(): HasMany
     {
-        return $this->hasMany(Circulation::class, 'member_id', 'member_id');
+        return $this->hasMany(Circulation::class, 'member_id');
     }
 
     public function activeBorrowings()
@@ -39,18 +37,18 @@ class Member extends Model
 
     public function reservations(): HasMany
     {
-        return $this->hasMany(Reservation::class, 'member_id', 'member_id');
+        return $this->hasMany(Reservation::class, 'member_id');
     }
 
     public function fines()
     {
-        return $this->hasManyThrough(Fine::class, Circulation::class, 'member_id', 'transaction_id');
+        return $this->hasManyThrough(Fine::class, Circulation::class, 'member_id', 'circulation_id');
     }
 
     // Accessors
     public function getPendingFinesAttribute()
     {
-        return $this->fines()->where('fine_status', 'PENDING')->sum('fine_amount');
+        return $this->fines()->where('status', 'PENDING')->sum('fine_amount');
     }
 
     public function getOverdueBorrowingsAttribute()

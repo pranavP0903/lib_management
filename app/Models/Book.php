@@ -4,13 +4,13 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasManyThrough;
 
 class Book extends Model
 {
-    protected $primaryKey = 'book_id';
-    public $incrementing = true;
-    protected $keyType = 'int';
-
+    /**
+     * Mass assignable attributes
+     */
     protected $fillable = [
         'title',
         'author',
@@ -21,29 +21,63 @@ class Book extends Model
         'digital_resource_url'
     ];
 
-    // Relationships
+    /*
+    |--------------------------------------------------------------------------
+    | Relationships
+    |--------------------------------------------------------------------------
+    */
+
+    /**
+     * A book has many physical copies
+     */
     public function copies(): HasMany
     {
-        return $this->hasMany(BookCopy::class, 'book_id', 'book_id');
+        return $this->hasMany(BookCopy::class, 'book_id');
     }
 
+    /**
+     * A book can have many reservations
+     */
     public function reservations(): HasMany
     {
-        return $this->hasMany(Reservation::class, 'book_id', 'book_id');
+        return $this->hasMany(Reservation::class, 'book_id');
     }
 
-    public function circulations()
+    /**
+     * A book can have many circulations through book copies
+     */
+    public function circulations(): HasManyThrough
     {
-        return $this->hasManyThrough(Circulation::class, BookCopy::class, 'book_id', 'copy_id');
+        return $this->hasManyThrough(
+            Circulation::class,
+            BookCopy::class,
+            'book_id',   // FK on book_copies table
+            'copy_id',   // FK on circulation table
+            'id',        // PK on books table
+            'id'         // PK on book_copies table
+        );
     }
 
-    // Helper Methods
-    public function availableCopies()
+    /*
+    |--------------------------------------------------------------------------
+    | Helper Methods
+    |--------------------------------------------------------------------------
+    */
+
+    /**
+     * Get available copies count
+     */
+    public function availableCopies(): int
     {
-        return $this->copies()->where('status', 'AVAILABLE')->count();
+        return $this->copies()
+            ->where('status', 'AVAILABLE')
+            ->count();
     }
 
-    public function totalCopies()
+    /**
+     * Get total copies count
+     */
+    public function totalCopies(): int
     {
         return $this->copies()->count();
     }

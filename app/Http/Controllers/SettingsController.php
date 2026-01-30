@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\LibrarySetting;
+use App\Models\AuditLog;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Artisan;
 
@@ -40,7 +41,11 @@ class SettingsController extends Controller
             LibrarySetting::setValue($key, $value);
         }
 
-        AuditLog::log('SETTINGS_UPDATE', "System settings updated");
+        AuditLog::create([
+            'action_type' => 'SETTINGS_UPDATE',
+            'description' => "System settings updated",
+            'performed_by' => auth()->id() ?? null,
+        ]);
 
         return redirect()->route('settings.index')
             ->with('success', 'Settings updated successfully');
@@ -71,7 +76,11 @@ class SettingsController extends Controller
             exec($command, $output, $returnVar);
 
             if ($returnVar === 0) {
-                AuditLog::log('DATABASE_BACKUP', "Database backup created: {$filename}");
+                AuditLog::create([
+                    'action_type' => 'DATABASE_BACKUP',
+                    'description' => "Database backup created: {$filename}",
+                    'performed_by' => auth()->id() ?? null,
+                ]);
                 return response()->download($path)->deleteFileAfterSend(true);
             } else {
                 throw new \Exception('Backup failed');
@@ -90,7 +99,11 @@ class SettingsController extends Controller
         Artisan::call('config:clear');
         Artisan::call('view:clear');
 
-        AuditLog::log('CACHE_CLEAR', "System cache cleared");
+        AuditLog::create([
+            'action_type' => 'CACHE_CLEAR',
+            'description' => "System cache cleared",
+            'performed_by' => auth()->id() ?? null,
+        ]);
 
         return redirect()->back()
             ->with('success', 'Cache cleared successfully');
@@ -120,7 +133,11 @@ class SettingsController extends Controller
 
         LibrarySetting::insert($defaults);
 
-        AuditLog::log('SETTINGS_RESET', "System settings reset to defaults");
+        AuditLog::create([
+            'action_type' => 'SETTINGS_RESET',
+            'description' => "System settings reset to defaults",
+            'performed_by' => auth()->id() ?? null,
+        ]);
 
         return redirect()->route('settings.index')
             ->with('success', 'Settings reset to defaults successfully');

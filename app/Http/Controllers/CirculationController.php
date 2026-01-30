@@ -7,6 +7,9 @@ use App\Models\Member;
 use App\Models\BookCopy;
 use App\Models\Fine;
 use App\Models\Reservation;
+use App\Models\AuditLog;
+use App\Models\LibrarySetting;
+use App\Models\Book;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -20,7 +23,7 @@ class CirculationController extends Controller
         $copyId = $request->get('copy_id');
 
         $member = $memberId ? Member::find($memberId) : null;
-        $book = $bookId ? \App\Models\Book::find($bookId) : null;
+        $book = $bookId ? Book::find($bookId) : null;
         $copy = $copyId ? BookCopy::find($copyId) : null;
 
         return view('circulation.issue', compact('member', 'book', 'copy'));
@@ -30,8 +33,8 @@ class CirculationController extends Controller
     public function store(Request $request)
     {
         $validated = $request->validate([
-            'member_id' => 'required|exists:members,member_id',
-            'copy_id' => 'required|exists:book_copies,copy_id',
+            'member_id' => 'required|exists:members,id',
+            'copy_id' => 'required|exists:book_copies,id',
             'issue_date' => 'required|date',
             'due_date' => 'required|date|after:issue_date',
             'notes' => 'nullable|string',
@@ -52,7 +55,7 @@ class CirculationController extends Controller
         }
 
         // Check pending fines
-        $pendingFines = $member->fines()->where('fine_status', 'PENDING')->sum('fine_amount');
+        $pendingFines = $member->fines()->where('status', 'PENDING')->sum('fine_amount');
         if ($pendingFines > 0) {
             return redirect()->back()
                 ->with('error', "Member has pending fines: ₹{$pendingFines}");
@@ -74,6 +77,7 @@ class CirculationController extends Controller
                 'issue_date' => $validated['issue_date'],
                 'due_date' => $validated['due_date'],
                 'status' => 'ISSUED',
+                'notes' => $validated['notes'] ?? null,
             ]);
 
             // Update copy status
@@ -89,7 +93,11 @@ class CirculationController extends Controller
                 $reservation->update(['status' => 'ALLOCATED']);
             }
 
-            AuditLog::log('BOOK_ISSUE', "Book issued to {$member->full_name}");
+            AuditLog::create([
+                'action_type' => 'BOOK_ISSUE',
+                'description' => "Book issued to {$member->full_name}",
+                'performed_by' => auth()->id() ?? null,
+            ]);
 
             DB::commit();
 
@@ -125,13 +133,13 @@ class CirculationController extends Controller
     public function returnBook(Request $request)
     {
         $validated = $request->validate([
-            'transaction_id' => 'required|exists:circulation,transaction_id',
+            'circulation_id' => 'required|exists:circulation,id',
             'return_date' => 'required|date',
             'condition' => 'nullable|string|max:255',
             'notes' => 'nullable|string',
         ]);
 
-        $circulation = Circulation::with(['member', 'copy'])->findOrFail($validated['transaction_id']);
+        $circulation = Circulation::with(['member', 'copy'])->findOrFail($validated['circulation_id']);
 
         DB::beginTransaction();
         try {
@@ -147,20 +155,20 @@ class CirculationController extends Controller
             // Check for overdue and apply fine
             if ($circulation->due_date < $validated['return_date']) {
                 $overdueDays = $circulation->due_date->diffInDays($validated['return_date']);
-                $finePerDay = \App\Models\LibrarySetting::getValue('FINE_PER_DAY', 5);
+                $finePerDay = LibrarySetting::getValue('FINE_PER_DAY', 5);
                 $fineAmount = $overdueDays * $finePerDay;
 
                 Fine::create([
-                    'transaction_id' => $circulation->transaction_id,
+                    'circulation_id' => $circulation->id,
                     'fine_amount' => $fineAmount,
-                    'fine_status' => 'PENDING',
+                    'status' => 'PENDING',
                 ]);
             }
 
             // Check for waiting reservations
             $reservation = Reservation::where('book_id', $circulation->copy->book_id)
                 ->where('status', 'WAITING')
-                ->orderBy('reservation_date', 'asc')
+                ->orderBy('created_at', 'asc')
                 ->first();
                 
             if ($reservation) {
@@ -168,7 +176,11 @@ class CirculationController extends Controller
                 // Here you could send notification to the member
             }
 
-            AuditLog::log('BOOK_RETURN', "Book returned by {$circulation->member->full_name}");
+            AuditLog::create([
+                'action_type' => 'BOOK_RETURN',
+                'description' => "Book returned by {$circulation->member->full_name}",
+                'performed_by' => auth()->id() ?? null,
+            ]);
 
             DB::commit();
 
@@ -223,7 +235,7 @@ class CirculationController extends Controller
     // Show overdue borrowings
     public function overdue(Request $request)
     {
-        $query = Circulation::with(['member', 'copy.book', 'fines'])
+        $query = Circulation::with(['member', 'copy.book', 'fine'])
             ->where('status', 'ISSUED')
             ->where('due_date', '<', now());
 
@@ -261,7 +273,7 @@ class CirculationController extends Controller
             }),
             'max_overdue_days' => $overdue->max(function($item) {
                 return $item->overdue_days;
-            }),
+            }) ?? 0,
             'affected_members' => $overdue->unique('member_id')->count(),
         ];
 
@@ -291,7 +303,11 @@ class CirculationController extends Controller
             'renewals' => $circulation->renewals + 1,
         ]);
 
-        AuditLog::log('BOOK_RENEW', "Book renewed for {$member->full_name}");
+        AuditLog::create([
+            'action_type' => 'BOOK_RENEW',
+            'description' => "Book renewed for {$member->full_name}",
+            'performed_by' => auth()->id() ?? null,
+        ]);
 
         return redirect()->back()
             ->with('success', 'Book renewed successfully. New due date: ' . $newDueDate->format('M d, Y'));

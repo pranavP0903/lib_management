@@ -6,9 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class LibrarySetting extends Model
 {
-    protected $primaryKey = 'setting_id';
-    public $incrementing = true;
-    protected $keyType = 'int';
+    // REMOVED incorrect primary key definition
 
     protected $fillable = [
         'setting_key',
@@ -19,7 +17,7 @@ class LibrarySetting extends Model
         'updated_at' => 'datetime'
     ];
 
-    // Helper Methods
+    // Static helper methods
     public static function getValue($key, $default = null)
     {
         $setting = self::where('setting_key', $key)->first();

@@ -5,6 +5,8 @@ namespace App\Http\Controllers;
 use App\Models\Reservation;
 use App\Models\Book;
 use App\Models\Member;
+use App\Models\AuditLog;
+use App\Models\LibrarySetting;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -30,7 +32,7 @@ class ReservationController extends Controller
             $query->where('member_id', $request->member_id);
         }
 
-        $reservations = $query->orderBy('reservation_date', 'desc')->paginate(30);
+        $reservations = $query->orderBy('created_at', 'desc')->paginate(30);
 
         return view('reservations.index', compact('reservations'));
     }
@@ -39,8 +41,8 @@ class ReservationController extends Controller
     public function store(Request $request)
     {
         $validated = $request->validate([
-            'member_id' => 'required|exists:members,member_id',
-            'book_id' => 'required|exists:books,book_id',
+            'member_id' => 'required|exists:members,id',
+            'book_id' => 'required|exists:books,id',
             'notes' => 'nullable|string',
         ]);
 
@@ -59,7 +61,7 @@ class ReservationController extends Controller
         }
 
         // Check reservation limit
-        $maxReservations = \App\Models\LibrarySetting::getValue('MAX_RESERVATIONS', 2);
+        $maxReservations = LibrarySetting::getValue('MAX_RESERVATIONS', 2);
         $activeReservations = $member->reservations()->whereIn('status', ['WAITING', 'ALLOCATED'])->count();
         
         if ($activeReservations >= $maxReservations) {
@@ -84,7 +86,11 @@ class ReservationController extends Controller
             'status' => 'WAITING',
         ]);
 
-        AuditLog::log('RESERVATION_CREATE', "Reservation created for {$book->title}");
+        AuditLog::create([
+            'action_type' => 'RESERVATION_CREATE',
+            'description' => "Reservation created for {$book->title}",
+            'performed_by' => auth()->id() ?? null,
+        ]);
 
         return redirect()->route('reservations.index')
             ->with('success', 'Reservation created successfully');
@@ -112,7 +118,11 @@ class ReservationController extends Controller
             // Update copy status
             $copy->update(['status' => 'RESERVED']);
 
-            AuditLog::log('RESERVATION_ALLOCATE', "Reservation allocated for {$reservation->book->title}");
+            AuditLog::create([
+                'action_type' => 'RESERVATION_ALLOCATE',
+                'description' => "Reservation allocated for {$reservation->book->title}",
+                'performed_by' => auth()->id() ?? null,
+            ]);
 
             DB::commit();
 
@@ -129,7 +139,7 @@ class ReservationController extends Controller
     // Cancel reservation
     public function destroy($id)
     {
-        $reservation = Reservation::findOrFail($id);
+        $reservation = Reservation::with('book')->findOrFail($id);
         $bookTitle = $reservation->book->title;
         
         // If reservation was allocated, free the copy
@@ -142,7 +152,11 @@ class ReservationController extends Controller
 
         $reservation->update(['status' => 'CANCELLED']);
 
-        AuditLog::log('RESERVATION_CANCEL', "Reservation cancelled for {$bookTitle}");
+        AuditLog::create([
+            'action_type' => 'RESERVATION_CANCEL',
+            'description' => "Reservation cancelled for {$bookTitle}",
+            'performed_by' => auth()->id() ?? null,
+        ]);
 
         return redirect()->back()
             ->with('success', 'Reservation cancelled successfully');

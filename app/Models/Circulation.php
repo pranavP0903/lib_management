@@ -5,64 +5,95 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use App\Models\LibrarySetting;
 
 class Circulation extends Model
 {
-    protected $primaryKey = 'transaction_id';
-    public $incrementing = true;
-    protected $keyType = 'int';
+    /**
+     * Explicit table name (IMPORTANT)
+     */
+    protected $table = 'circulation';
 
+    /**
+     * Mass assignable fields
+     */
     protected $fillable = [
         'member_id',
-        'copy_id',
+        'copy_id',          // change to 'book_copy_id' ONLY if your DB column uses that
         'issue_date',
         'due_date',
         'return_date',
-        'status'
+        'status',
+        'renewals',
+        'notes'
     ];
 
+    /**
+     * Attribute casting
+     */
     protected $casts = [
-        'issue_date' => 'date',
-        'due_date' => 'date',
+        'issue_date'  => 'date',
+        'due_date'    => 'date',
         'return_date' => 'date',
-        'status' => 'string'
+        'status'      => 'string'
     ];
 
-    // Relationships
+    /**
+     * Enable timestamps
+     */
+    public $timestamps = true;
+
+    /*
+    |--------------------------------------------------------------------------
+    | Relationships
+    |--------------------------------------------------------------------------
+    */
+
     public function member(): BelongsTo
     {
-        return $this->belongsTo(Member::class, 'member_id', 'member_id');
+        return $this->belongsTo(Member::class, 'member_id');
     }
 
     public function copy(): BelongsTo
     {
-        return $this->belongsTo(BookCopy::class, 'copy_id', 'copy_id');
+        return $this->belongsTo(BookCopy::class, 'copy_id');
     }
 
     public function fine(): HasOne
     {
-        return $this->hasOne(Fine::class, 'transaction_id', 'transaction_id');
+        return $this->hasOne(Fine::class, 'circulation_id');
     }
 
-    // Accessors
-    public function getIsOverdueAttribute()
+    /*
+    |--------------------------------------------------------------------------
+    | Accessors
+    |--------------------------------------------------------------------------
+    */
+
+    public function getIsOverdueAttribute(): bool
     {
-        return $this->status === 'ISSUED' && $this->due_date < now();
+        return $this->status === 'ISSUED'
+            && $this->due_date !== null
+            && $this->due_date->lt(now());
     }
 
-    public function getOverdueDaysAttribute()
+    public function getOverdueDaysAttribute(): int
     {
-        if (!$this->is_overdue) return 0;
+        if (!$this->is_overdue) {
+            return 0;
+        }
+
         return now()->diffInDays($this->due_date);
     }
 
-    public function getCalculatedFineAttribute()
+    public function getCalculatedFineAttribute(): int
     {
-        if (!$this->is_overdue) return 0;
-        
-        $finePerDay = LibrarySetting::where('setting_key', 'FINE_PER_DAY')
-            ->value('setting_value') ?? 5;
-            
+        if (!$this->is_overdue) {
+            return 0;
+        }
+
+        $finePerDay = (int) LibrarySetting::getValue('FINE_PER_DAY', 5);
+
         return $this->overdue_days * $finePerDay;
     }
 }

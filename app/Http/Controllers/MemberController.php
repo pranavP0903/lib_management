@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Member;
 use App\Models\Circulation;
+use App\Models\AuditLog;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -13,7 +14,7 @@ class MemberController extends Controller
     public function index(Request $request)
     {
         $query = Member::withCount(['activeBorrowings', 'fines as pending_fines' => function($q) {
-            $q->where('fine_status', 'PENDING');
+            $q->where('status', 'PENDING');
         }]);
 
         // Search
@@ -23,7 +24,7 @@ class MemberController extends Controller
                 $q->where('full_name', 'like', "%{$search}%")
                   ->orWhere('email', 'like', "%{$search}%")
                   ->orWhere('phone', 'like', "%{$search}%")
-                  ->orWhere('member_id', 'like', "%{$search}%");
+                  ->orWhere('id', 'like', "%{$search}%");
             });
         }
 
@@ -70,9 +71,13 @@ class MemberController extends Controller
 
         $member = Member::create($validated);
 
-        AuditLog::log('MEMBER_CREATE', "Member registered: {$member->full_name}");
+        AuditLog::create([
+            'action_type' => 'MEMBER_CREATE',
+            'description' => "Member registered: {$member->full_name}",
+            'performed_by' => auth()->id() ?? null,
+        ]);
 
-        return redirect()->route('members.show', $member->member_id)
+        return redirect()->route('members.show', $member->id)
             ->with('success', 'Member registered successfully');
     }
 
@@ -85,7 +90,7 @@ class MemberController extends Controller
                 $q->orderBy('issue_date', 'desc')->limit(10);
             },
             'fines' => function($q) {
-                $q->where('fine_status', 'PENDING');
+                $q->where('status', 'PENDING');
             }
         ])->findOrFail($id);
 
@@ -112,10 +117,10 @@ class MemberController extends Controller
         $member = Member::findOrFail($id);
 
         $validated = $request->validate([
-            'hrms_user_id' => 'required|integer|unique:members,hrms_user_id,' . $id . ',member_id',
+            'hrms_user_id' => 'required|integer|unique:members,hrms_user_id,' . $id . ',id',
             'full_name' => 'required|string|max:100',
             'member_type' => 'required|in:STUDENT,FACULTY',
-            'email' => 'required|email|max:100|unique:members,email,' . $id . ',member_id',
+            'email' => 'required|email|max:100|unique:members,email,' . $id . ',id',
             'phone' => 'nullable|string|max:15',
             'borrow_limit' => 'required|integer|min:1|max:10',
             'status' => 'required|in:ACTIVE,INACTIVE',
@@ -123,9 +128,13 @@ class MemberController extends Controller
 
         $member->update($validated);
 
-        AuditLog::log('MEMBER_UPDATE', "Member updated: {$member->full_name}");
+        AuditLog::create([
+            'action_type' => 'MEMBER_UPDATE',
+            'description' => "Member updated: {$member->full_name}",
+            'performed_by' => auth()->id() ?? null,
+        ]);
 
-        return redirect()->route('members.show', $member->member_id)
+        return redirect()->route('members.show', $member->id)
             ->with('success', 'Member updated successfully');
     }
 
@@ -143,7 +152,11 @@ class MemberController extends Controller
 
         $member->delete();
 
-        AuditLog::log('MEMBER_DELETE', "Member deleted: {$name}");
+        AuditLog::create([
+            'action_type' => 'MEMBER_DELETE',
+            'description' => "Member deleted: {$name}",
+            'performed_by' => auth()->id() ?? null,
+        ]);
 
         return redirect()->route('members.index')
             ->with('success', 'Member deleted successfully');
@@ -155,7 +168,11 @@ class MemberController extends Controller
         $member = Member::findOrFail($id);
         $member->update(['status' => 'ACTIVE']);
 
-        AuditLog::log('MEMBER_ACTIVATE', "Member activated: {$member->full_name}");
+        AuditLog::create([
+            'action_type' => 'MEMBER_ACTIVATE',
+            'description' => "Member activated: {$member->full_name}",
+            'performed_by' => auth()->id() ?? null,
+        ]);
 
         return redirect()->back()
             ->with('success', 'Member activated successfully');
@@ -167,7 +184,11 @@ class MemberController extends Controller
         $member = Member::findOrFail($id);
         $member->update(['status' => 'INACTIVE']);
 
-        AuditLog::log('MEMBER_DEACTIVATE', "Member deactivated: {$member->full_name}");
+        AuditLog::create([
+            'action_type' => 'MEMBER_DEACTIVATE',
+            'description' => "Member deactivated: {$member->full_name}",
+            'performed_by' => auth()->id() ?? null,
+        ]);
 
         return redirect()->back()
             ->with('success', 'Member deactivated successfully');
@@ -180,12 +201,12 @@ class MemberController extends Controller
         
         $members = Member::where('full_name', 'like', "%{$query}%")
             ->orWhere('email', 'like', "%{$query}%")
-            ->orWhere('member_id', 'like', "%{$query}%")
+            ->orWhere('id', 'like', "%{$query}%")
             ->limit(10)
             ->get()
             ->map(function ($member) {
                 return [
-                    'member_id' => $member->member_id,
+                    'id' => $member->id,
                     'full_name' => $member->full_name,
                     'email' => $member->email,
                     'member_type' => $member->member_type,
@@ -210,7 +231,7 @@ class MemberController extends Controller
             'status' => $member->status,
             'current_loans' => $member->activeBorrowings()->count(),
             'borrow_limit' => $member->borrow_limit,
-            'pending_fines' => $member->fines()->where('fine_status', 'PENDING')->sum('fine_amount'),
+            'pending_fines' => $member->fines()->where('status', 'PENDING')->sum('fine_amount'),
             'has_overdue' => $member->circulations()
                 ->where('status', 'ISSUED')
                 ->where('due_date', '<', now())
