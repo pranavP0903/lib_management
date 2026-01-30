@@ -12,331 +12,206 @@ use App\Models\LibrarySetting;
 use App\Models\Book;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Carbon\Carbon;
 
 class CirculationController extends Controller
 {
-    // Show issue book form
+    /* =====================================================
+     | ISSUE BOOK
+     ===================================================== */
     public function create(Request $request)
     {
-        $memberId = $request->get('member_id');
-        $bookId = $request->get('book_id');
-        $copyId = $request->get('copy_id');
-
-        $member = $memberId ? Member::find($memberId) : null;
-        $book = $bookId ? Book::find($bookId) : null;
-        $copy = $copyId ? BookCopy::find($copyId) : null;
+        $member = $request->member_id ? Member::find($request->member_id) : null;
+        $book   = $request->book_id ? Book::find($request->book_id) : null;
+        $copy   = $request->copy_id ? BookCopy::find($request->copy_id) : null;
 
         return view('circulation.issue', compact('member', 'book', 'copy'));
     }
 
-    // Issue book to member
     public function store(Request $request)
     {
         $validated = $request->validate([
-            'member_id' => 'required|exists:members,id',
-            'copy_id' => 'required|exists:book_copies,id',
+            'member_id'  => 'required|exists:members,id',
+            'copy_id'    => 'required|exists:book_copies,id',
             'issue_date' => 'required|date',
-            'due_date' => 'required|date|after:issue_date',
-            'notes' => 'nullable|string',
+            'due_date'   => 'required|date|after:issue_date',
+            'notes'      => 'nullable|string',
         ]);
 
-        // Check member status
         $member = Member::findOrFail($validated['member_id']);
+
         if ($member->status !== 'ACTIVE') {
-            return redirect()->back()
-                ->with('error', 'Member is not active');
+            return back()->with('error', 'Member is not active');
         }
 
-        // Check borrowing limit
-        $activeBorrowings = $member->activeBorrowings()->count();
-        if ($activeBorrowings >= $member->borrow_limit) {
-            return redirect()->back()
-                ->with('error', "Member has reached borrowing limit ({$member->borrow_limit})");
+        if ($member->activeBorrowings()->count() >= $member->borrow_limit) {
+            return back()->with('error', 'Borrow limit reached');
         }
 
-        // Check pending fines
-        $pendingFines = $member->fines()->where('status', 'PENDING')->sum('fine_amount');
-        if ($pendingFines > 0) {
-            return redirect()->back()
-                ->with('error', "Member has pending fines: ₹{$pendingFines}");
+        if ($member->fines()->where('status', 'PENDING')->sum('fine_amount') > 0) {
+            return back()->with('error', 'Member has pending fines');
         }
 
-        // Check copy availability
         $copy = BookCopy::findOrFail($validated['copy_id']);
+
         if ($copy->status !== 'AVAILABLE') {
-            return redirect()->back()
-                ->with('error', 'Book copy is not available');
+            return back()->with('error', 'Book copy not available');
         }
 
-        DB::beginTransaction();
-        try {
-            // Create circulation record
-            $circulation = Circulation::create([
-                'member_id' => $validated['member_id'],
-                'copy_id' => $validated['copy_id'],
+        DB::transaction(function () use ($validated, $member, $copy) {
+            Circulation::create([
+                'member_id'  => $member->id,
+                'copy_id'    => $copy->id,
                 'issue_date' => $validated['issue_date'],
-                'due_date' => $validated['due_date'],
-                'status' => 'ISSUED',
-                'notes' => $validated['notes'] ?? null,
+                'due_date'   => $validated['due_date'],
+                'status'     => 'ISSUED',
+                'notes'      => $validated['notes'] ?? null,
             ]);
 
-            // Update copy status
             $copy->update(['status' => 'ISSUED']);
 
-            // Check and update any reservations
-            $reservation = Reservation::where('book_id', $copy->book_id)
-                ->where('member_id', $validated['member_id'])
+            Reservation::where('book_id', $copy->book_id)
+                ->where('member_id', $member->id)
                 ->where('status', 'WAITING')
-                ->first();
-                
-            if ($reservation) {
-                $reservation->update(['status' => 'ALLOCATED']);
-            }
+                ->update(['status' => 'ALLOCATED']);
 
             AuditLog::create([
                 'action_type' => 'BOOK_ISSUE',
                 'description' => "Book issued to {$member->full_name}",
-                'performed_by' => auth()->id() ?? null,
+                'performed_by' => null,
             ]);
+        });
 
-            DB::commit();
-
-            return redirect()->route('circulation.active')
-                ->with('success', 'Book issued successfully');
-
-        } catch (\Exception $e) {
-            DB::rollBack();
-            return redirect()->back()
-                ->with('error', 'Error issuing book: ' . $e->getMessage());
-        }
+        return redirect()->route('circulation.active')
+            ->with('success', 'Book issued successfully');
     }
 
-    // Show return book form
+    /* =====================================================
+     | RETURN BOOK
+     ===================================================== */
     public function returnForm()
     {
         $activeBorrowings = Circulation::with(['member', 'copy.book'])
             ->where('status', 'ISSUED')
-            ->orderBy('due_date', 'asc')
-            ->limit(50)
+            ->orderBy('due_date')
             ->get();
 
-        $stats = [
-            'today_returns' => Circulation::whereDate('due_date', today())->where('status', 'ISSUED')->count(),
-            'week_returns' => Circulation::whereBetween('due_date', [today(), today()->addDays(7)])->where('status', 'ISSUED')->count(),
-            'overdue_returns' => Circulation::where('due_date', '<', today())->where('status', 'ISSUED')->count(),
-        ];
+        // 👇 FIXED: pass real variables (not array)
+        $today_returns   = Circulation::where('status', 'ISSUED')
+            ->whereDate('due_date', today())
+            ->count();
 
-        return view('circulation.return', compact('activeBorrowings', 'stats'));
+        $week_returns    = Circulation::where('status', 'ISSUED')
+            ->whereBetween('due_date', [today(), today()->addDays(7)])
+            ->count();
+
+        $overdue_returns = Circulation::where('status', 'ISSUED')
+            ->where('due_date', '<', today())
+            ->count();
+
+        return view('circulation.return', compact(
+            'activeBorrowings',
+            'today_returns',
+            'week_returns',
+            'overdue_returns'
+        ));
     }
 
-    // Process book return
     public function returnBook(Request $request)
     {
         $validated = $request->validate([
             'circulation_id' => 'required|exists:circulation,id',
-            'return_date' => 'required|date',
-            'condition' => 'nullable|string|max:255',
-            'notes' => 'nullable|string',
+            'return_date'    => 'required|date|after_or_equal:issue_date',
         ]);
 
         $circulation = Circulation::with(['member', 'copy'])->findOrFail($validated['circulation_id']);
 
-        DB::beginTransaction();
-        try {
-            // Update circulation record
+        DB::transaction(function () use ($circulation, $validated) {
             $circulation->update([
                 'return_date' => $validated['return_date'],
-                'status' => 'RETURNED',
+                'status'      => 'RETURNED',
             ]);
 
-            // Update copy status
             $circulation->copy->update(['status' => 'AVAILABLE']);
 
-            // Check for overdue and apply fine
-            if ($circulation->due_date < $validated['return_date']) {
-                $overdueDays = $circulation->due_date->diffInDays($validated['return_date']);
-                $finePerDay = LibrarySetting::getValue('FINE_PER_DAY', 5);
-                $fineAmount = $overdueDays * $finePerDay;
+            // Apply fine safely
+            if ($circulation->due_date->lt($validated['return_date']) &&
+                !$circulation->fine()->exists()) {
+
+                $days = $circulation->due_date->diffInDays($validated['return_date']);
+                $rate = LibrarySetting::getValue('FINE_PER_DAY', 5);
 
                 Fine::create([
                     'circulation_id' => $circulation->id,
-                    'fine_amount' => $fineAmount,
-                    'status' => 'PENDING',
+                    'fine_amount'    => $days * $rate,
+                    'status'         => 'PENDING',
                 ]);
-            }
-
-            // Check for waiting reservations
-            $reservation = Reservation::where('book_id', $circulation->copy->book_id)
-                ->where('status', 'WAITING')
-                ->orderBy('created_at', 'asc')
-                ->first();
-                
-            if ($reservation) {
-                $reservation->update(['status' => 'ALLOCATED']);
-                // Here you could send notification to the member
             }
 
             AuditLog::create([
                 'action_type' => 'BOOK_RETURN',
                 'description' => "Book returned by {$circulation->member->full_name}",
-                'performed_by' => auth()->id() ?? null,
+                'performed_by' => null,
             ]);
+        });
 
-            DB::commit();
-
-            return redirect()->route('circulation.return.form')
-                ->with('success', 'Book returned successfully');
-
-        } catch (\Exception $e) {
-            DB::rollBack();
-            return redirect()->back()
-                ->with('error', 'Error returning book: ' . $e->getMessage());
-        }
+        return redirect()->route('circulation.return.form')
+            ->with('success', 'Book returned successfully');
     }
 
-    // Show active borrowings
-    public function active(Request $request)
+    /* =====================================================
+     | ACTIVE & OVERDUE
+     ===================================================== */
+    public function active()
     {
-        $query = Circulation::with(['member', 'copy.book'])
-            ->where('status', 'ISSUED');
-
-        // Filter by member type
-        if ($request->has('member_type')) {
-            $query->whereHas('member', function($q) use ($request) {
-                $q->where('member_type', $request->member_type);
-            });
-        }
-
-        // Filter by overdue status
-        if ($request->has('overdue')) {
-            if ($request->overdue == 'overdue') {
-                $query->where('due_date', '<', now());
-            } elseif ($request->overdue == 'due_soon') {
-                $query->whereBetween('due_date', [now(), now()->addDays(3)]);
-            }
-        }
-
-        // Filter by due date
-        if ($request->has('due_date')) {
-            $query->whereDate('due_date', $request->due_date);
-        }
-
-        $loans = $query->orderBy('due_date', 'asc')->paginate(30);
-
-        $stats = [
-            'total' => $loans->total(),
-            'overdue' => Circulation::where('status', 'ISSUED')->where('due_date', '<', now())->count(),
-            'due_today' => Circulation::where('status', 'ISSUED')->whereDate('due_date', today())->count(),
-        ];
-
-        return view('circulation.active', compact('loans', 'stats'));
-    }
-
-    // Show overdue borrowings
-    public function overdue(Request $request)
-    {
-        $query = Circulation::with(['member', 'copy.book', 'fine'])
+        $loans = Circulation::with(['member', 'copy.book'])
             ->where('status', 'ISSUED')
-            ->where('due_date', '<', now());
+            ->orderBy('due_date')
+            ->paginate(30);
 
-        // Filter by member type
-        if ($request->has('member_type')) {
-            $query->whereHas('member', function($q) use ($request) {
-                $q->where('member_type', $request->member_type);
-            });
-        }
+        return view('circulation.active', compact('loans'));
+    }
 
-        // Filter by overdue period
-        if ($request->has('overdue_period')) {
-            $now = now();
-            switch ($request->overdue_period) {
-                case '1-7':
-                    $query->where('due_date', '>=', $now->subDays(7));
-                    break;
-                case '8-14':
-                    $query->whereBetween('due_date', [$now->subDays(14), $now->subDays(8)]);
-                    break;
-                case '15-30':
-                    $query->whereBetween('due_date', [$now->subDays(30), $now->subDays(15)]);
-                    break;
-                case '30+':
-                    $query->where('due_date', '<', $now->subDays(30));
-                    break;
-            }
-        }
+    public function overdue()
+    {
+        $now = Carbon::now();
 
-        $overdue = $query->orderBy('due_date', 'asc')->get();
+        $overdue = Circulation::with(['member', 'copy.book', 'fine'])
+            ->where('status', 'ISSUED')
+            ->where('due_date', '<', $now)
+            ->get();
 
         $stats = [
-            'total_fines' => $overdue->sum(function($item) {
-                return $item->calculated_fine;
-            }),
-            'max_overdue_days' => $overdue->max(function($item) {
-                return $item->overdue_days;
-            }) ?? 0,
+            'total_fines' => $overdue->sum->calculated_fine,
+            'max_overdue_days' => $overdue->max('overdue_days') ?? 0,
             'affected_members' => $overdue->unique('member_id')->count(),
         ];
 
-        $analysis = $this->analyzeOverdue($overdue);
-
-        return view('circulation.overdue', compact('overdue', 'stats', 'analysis'));
+        return view('circulation.overdue', compact('overdue', 'stats'));
     }
 
-    // Renew borrowing
+    /* =====================================================
+     | RENEW
+     ===================================================== */
     public function renew($id)
     {
-        $circulation = Circulation::with(['member'])->findOrFail($id);
+        $circulation = Circulation::with('member')->findOrFail($id);
 
-        // Check if already renewed
-        if ($circulation->renewals >= 2) {
-            return redirect()->back()
-                ->with('error', 'Maximum renewals reached (2)');
+        if ($circulation->status !== 'ISSUED') {
+            return back()->with('error', 'Cannot renew returned book');
         }
 
-        // Calculate new due date based on member type
-        $member = $circulation->member;
-        $borrowDays = $member->member_type == 'FACULTY' ? 14 : 7;
-        $newDueDate = $circulation->due_date->addDays($borrowDays);
+        if ($circulation->renewals >= 2) {
+            return back()->with('error', 'Maximum renewals reached');
+        }
+
+        $days = $circulation->member->member_type === 'FACULTY' ? 14 : 7;
 
         $circulation->update([
-            'due_date' => $newDueDate,
+            'due_date' => $circulation->due_date->addDays($days),
             'renewals' => $circulation->renewals + 1,
         ]);
 
-        AuditLog::create([
-            'action_type' => 'BOOK_RENEW',
-            'description' => "Book renewed for {$member->full_name}",
-            'performed_by' => auth()->id() ?? null,
-        ]);
-
-        return redirect()->back()
-            ->with('success', 'Book renewed successfully. New due date: ' . $newDueDate->format('M d, Y'));
-    }
-
-    // Analyze overdue data
-    private function analyzeOverdue($overdue)
-    {
-        $students = $overdue->filter(function($item) {
-            return $item->member->member_type == 'STUDENT';
-        });
-
-        $faculty = $overdue->filter(function($item) {
-            return $item->member->member_type == 'FACULTY';
-        });
-
-        return [
-            'students' => [
-                'count' => $students->count(),
-                'percentage' => $overdue->count() > 0 ? round(($students->count() / $overdue->count()) * 100, 1) : 0,
-                'avg_days' => $students->avg('overdue_days') ? round($students->avg('overdue_days'), 1) : 0,
-                'total_fines' => $students->sum('calculated_fine'),
-            ],
-            'faculty' => [
-                'count' => $faculty->count(),
-                'percentage' => $overdue->count() > 0 ? round(($faculty->count() / $overdue->count()) * 100, 1) : 0,
-                'avg_days' => $faculty->avg('overdue_days') ? round($faculty->avg('overdue_days'), 1) : 0,
-                'total_fines' => $faculty->sum('calculated_fine'),
-            ],
-        ];
+        return back()->with('success', 'Book renewed successfully');
     }
 }

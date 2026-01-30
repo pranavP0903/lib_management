@@ -41,13 +41,14 @@ class FineController extends Controller
         $total_pending   = Fine::where('status', 'PENDING')->sum('fine_amount');
         $total_collected = Fine::where('status', 'PAID')->sum('fine_amount');
         $total_waived    = Fine::where('status', 'WAIVED')->sum('fine_amount');
+        $fine_rate       = LibrarySetting::getValue('FINE_PER_DAY', 5);
 
-        // Optional grouped stats (future use / charts)
+        // Optional grouped stats (future use)
         $stats = [
             'total_pending'   => $total_pending,
             'total_collected' => $total_collected,
             'total_waived'    => $total_waived,
-            'fine_rate'       => LibrarySetting::getValue('FINE_PER_DAY', 5),
+            'fine_rate'       => $fine_rate,
         ];
 
         return view('fines.index', compact(
@@ -55,7 +56,8 @@ class FineController extends Controller
             'stats',
             'total_pending',
             'total_collected',
-            'total_waived'
+            'total_waived',
+            'fine_rate'
         ));
     }
 

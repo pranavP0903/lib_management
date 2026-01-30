@@ -10,14 +10,15 @@
 @endsection
 
 @section('content')
+
 <!-- Search and Filter Card -->
 <div class="card shadow mb-4">
     <div class="card-body">
         <form action="{{ route('books.index') }}" method="GET" class="row g-3">
             <div class="col-md-5">
                 <div class="search-box">
-                    <input type="text" name="search" class="form-control" 
-                           placeholder="Search by title, author, ISBN..." 
+                    <input type="text" name="search" class="form-control"
+                           placeholder="Search by title, author, ISBN..."
                            value="{{ request('search') }}">
                     <i class="bi bi-search"></i>
                 </div>
@@ -54,13 +55,14 @@
 
 <!-- Books Grid -->
 <div class="row">
-    @forelse($books as $book)
+@forelse($books as $book)
     <div class="col-xl-3 col-lg-4 col-md-6 mb-4">
         <div class="card book-card h-100 shadow-sm">
             <div class="card-body">
-                <!-- Book Cover/Icon -->
+
+                <!-- Book Icon -->
                 <div class="text-center mb-3">
-                    <div class="bg-light rounded p-4 mb-3 mx-auto" style="width: 120px; height: 160px;">
+                    <div class="bg-light rounded p-4 mb-3 mx-auto" style="width:120px;height:160px;">
                         @if($book->digital_resource_url)
                             <i class="bi bi-file-earmark-pdf text-primary fs-1"></i>
                             <div class="mt-2">
@@ -74,14 +76,14 @@
                         @endif
                     </div>
                 </div>
-                
+
                 <!-- Book Info -->
                 <h5 class="card-title text-truncate">{{ $book->title }}</h5>
                 <p class="card-text text-muted small mb-2">
                     <i class="bi bi-person me-1"></i>{{ $book->author }}
                 </p>
-                
-                <!-- Book Details -->
+
+                <!-- Details -->
                 <div class="mb-3">
                     <div class="d-flex justify-content-between mb-1">
                         <span class="text-muted">ISBN:</span>
@@ -98,29 +100,32 @@
                         </span>
                     </div>
                 </div>
-                
+
                 <!-- Action Buttons -->
                 <div class="d-grid gap-2">
-                    <a href="{{ route('books.show', $book->book_id) }}" class="btn btn-outline-primary btn-sm">
+                    <a href="{{ route('books.show', $book) }}" class="btn btn-outline-primary btn-sm">
                         <i class="bi bi-eye me-1"></i> View Details
                     </a>
+
                     <div class="btn-group" role="group">
-                        <a href="{{ route('books.edit', $book->book_id) }}" class="btn btn-outline-secondary btn-sm">
+                        <a href="{{ route('books.edit', $book) }}" class="btn btn-outline-secondary btn-sm">
                             <i class="bi bi-pencil"></i>
                         </a>
-                        <button type="button" class="btn btn-outline-danger btn-sm" 
-                                onclick="confirmDelete('delete-book-{{ $book->book_id }}')">
-                            <i class="bi bi-trash"></i>
-                        </button>
-                        <form id="delete-book-{{ $book->book_id }}" 
-                              action="{{ route('books.destroy', $book->book_id) }}" 
-                              method="POST" class="d-none">
+
+                        <form id="delete-book-{{ $book->id }}"
+                              action="{{ route('books.destroy', $book) }}"
+                              method="POST"
+                              onsubmit="return confirm('Are you sure you want to delete this book?')">
                             @csrf
                             @method('DELETE')
+                            <button type="submit" class="btn btn-outline-danger btn-sm">
+                                <i class="bi bi-trash"></i>
+                            </button>
                         </form>
                     </div>
                 </div>
             </div>
+
             <div class="card-footer bg-white">
                 <small class="text-muted">
                     <i class="bi bi-calendar me-1"></i>
@@ -129,7 +134,7 @@
             </div>
         </div>
     </div>
-    @empty
+@empty
     <div class="col-12">
         <div class="card shadow">
             <div class="card-body text-center py-5">
@@ -142,18 +147,14 @@
             </div>
         </div>
     </div>
-    @endforelse
+@endforelse
 </div>
 
 <!-- Pagination -->
 @if($books->hasPages())
 <div class="row mt-4">
     <div class="col-12">
-        <nav aria-label="Page navigation">
-            <ul class="pagination justify-content-center">
-                {{ $books->links() }}
-            </ul>
-        </nav>
+        {{ $books->links() }}
     </div>
 </div>
 @endif
@@ -163,60 +164,39 @@
     <div class="col-md-4">
         <div class="card bg-light border-0">
             <div class="card-body">
-                <div class="d-flex align-items-center">
-                    <div class="bg-primary text-white rounded p-3 me-3">
-                        <i class="bi bi-book fs-4"></i>
-                    </div>
-                    <div>
-                        <h6 class="mb-0">Total Titles</h6>
-                        <h3 class="mb-0">{{ $total_books }}</h3>
-                    </div>
-                </div>
+                <h6>Total Titles</h6>
+                <h3>{{ $total_books }}</h3>
             </div>
         </div>
     </div>
     <div class="col-md-4">
         <div class="card bg-light border-0">
             <div class="card-body">
-                <div class="d-flex align-items-center">
-                    <div class="bg-success text-white rounded p-3 me-3">
-                        <i class="bi bi-check-circle fs-4"></i>
-                    </div>
-                    <div>
-                        <h6 class="mb-0">Available Copies</h6>
-                        <h3 class="mb-0">{{ $available_copies }}</h3>
-                    </div>
-                </div>
+                <h6>Available Copies</h6>
+                <h3>{{ $available_copies }}</h3>
             </div>
         </div>
     </div>
     <div class="col-md-4">
         <div class="card bg-light border-0">
             <div class="card-body">
-                <div class="d-flex align-items-center">
-                    <div class="bg-warning text-white rounded p-3 me-3">
-                        <i class="bi bi-clock-history fs-4"></i>
-                    </div>
-                    <div>
-                        <h6 class="mb-0">Borrowed Copies</h6>
-                        <h3 class="mb-0">{{ $borrowed_copies }}</h3>
-                    </div>
-                </div>
+                <h6>Borrowed Copies</h6>
+                <h3>{{ $borrowed_copies }}</h3>
             </div>
         </div>
     </div>
 </div>
+
 @endsection
 
 @push('styles')
 <style>
-    .book-card {
-        transition: transform 0.3s, box-shadow 0.3s;
-    }
-    
-    .book-card:hover {
-        transform: translateY(-5px);
-        box-shadow: 0 10px 20px rgba(0,0,0,0.1) !important;
-    }
+.book-card {
+    transition: transform .3s, box-shadow .3s;
+}
+.book-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 10px 20px rgba(0,0,0,.1)!important;
+}
 </style>
 @endpush

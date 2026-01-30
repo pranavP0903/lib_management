@@ -19,7 +19,7 @@ Route::get('/', [DashboardController::class, 'index'])->name('dashboard');
 
 /*
 |--------------------------------------------------------------------------
-| Books Management
+| Books
 |--------------------------------------------------------------------------
 */
 Route::resource('books', BookController::class);
@@ -29,7 +29,7 @@ Route::get('/books/copies/available', [BookController::class, 'availableCopies']
 
 /*
 |--------------------------------------------------------------------------
-| Members Management
+| Members
 |--------------------------------------------------------------------------
 */
 Route::resource('members', MemberController::class);
@@ -40,24 +40,19 @@ Route::patch('/members/{member}/deactivate', [MemberController::class, 'deactiva
 
 /*
 |--------------------------------------------------------------------------
-| Circulation (Issue / Return / Renew)
+| Circulation
 |--------------------------------------------------------------------------
 */
 Route::prefix('circulation')->name('circulation.')->group(function () {
-
-    // Issue book
     Route::get('/issue', [CirculationController::class, 'create'])->name('issue');
     Route::post('/issue', [CirculationController::class, 'store'])->name('store');
 
-    // ✅ FIXED: Return book (route name matches Blade)
     Route::get('/return', [CirculationController::class, 'returnForm'])->name('return');
     Route::post('/return', [CirculationController::class, 'returnBook'])->name('return.submit');
 
-    // Lists
     Route::get('/active', [CirculationController::class, 'active'])->name('active');
     Route::get('/overdue', [CirculationController::class, 'overdue'])->name('overdue');
 
-    // Renew
     Route::post('/renew/{circulation}', [CirculationController::class, 'renew'])->name('renew');
 });
 
@@ -72,7 +67,7 @@ Route::post('/reservations/{reservation}/allocate', [ReservationController::clas
 
 /*
 |--------------------------------------------------------------------------
-| Fines Management
+| Fines
 |--------------------------------------------------------------------------
 */
 Route::resource('fines', FineController::class)->except(['create', 'store', 'edit', 'update']);
@@ -96,10 +91,12 @@ Route::prefix('reports')->name('reports.')->group(function () {
 
 /*
 |--------------------------------------------------------------------------
-| Settings
+| Settings (✅ FIXED)
 |--------------------------------------------------------------------------
 */
-Route::resource('settings', SettingsController::class)->only(['index', 'update']);
+Route::get('/settings', [SettingsController::class, 'index'])->name('settings.index');
+Route::put('/settings', [SettingsController::class, 'update'])->name('settings.update');
+
 Route::post('/settings/backup', [SettingsController::class, 'backup'])->name('settings.backup');
 Route::post('/settings/clear-cache', [SettingsController::class, 'clearCache'])->name('settings.clear-cache');
 Route::post('/settings/reset', [SettingsController::class, 'reset'])->name('settings.reset');

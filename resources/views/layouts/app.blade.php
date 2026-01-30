@@ -118,7 +118,7 @@
         <div class="container-fluid">
             <a class="navbar-brand d-flex align-items-center" href="{{ route('dashboard') }}">
                 <i class="bi bi-book-half me-2 fs-4"></i>
-                <span class="fw-bold">HRMS Library</span>
+                <span class="fw-bold">Library Management</span>
             </a>
             
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
