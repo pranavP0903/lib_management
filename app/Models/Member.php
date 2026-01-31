@@ -45,17 +45,24 @@ class Member extends Model
         return $this->hasManyThrough(Fine::class, Circulation::class, 'member_id', 'circulation_id');
     }
 
+    public function issues()
+    {
+        return $this->hasMany(Issue::class);
+    }
+
     // Accessors
     public function getPendingFinesAttribute()
     {
-        return $this->fines()->where('status', 'PENDING')->sum('fine_amount');
+        return $this->fines()  
+            ->where('fines.status', 'PENDING')
+            ->sum('fine_amount');
     }
 
     public function getOverdueBorrowingsAttribute()
     {
         return $this->circulations()
-            ->where('status', 'ISSUED')
-            ->where('due_date', '<', now())
+            ->where('circulations.status', 'ISSUED')
+            ->where('circulations.due_date', '<', now())
             ->count();
     }
 }

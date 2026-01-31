@@ -201,31 +201,48 @@ class BookController extends Controller
      * AJAX search
      */
     public function search(Request $request)
-    {
-        $query = $request->get('q');
+{
+    $q = $request->q;
 
-        $books = Book::withCount([
-            'copies as available_copies' => fn ($q) =>
-                $q->where('status', 'AVAILABLE')
+    $books = Book::withCount([
+            'copies as available_copies' => function ($q) {
+                $q->where('status', 'AVAILABLE');
+            }
         ])
-        ->where('title', 'like', "%{$query}%")
-        ->orWhere('author', 'like', "%{$query}%")
-        ->orWhere('isbn', 'like', "%{$query}%")
+        ->where('title', 'like', "%$q%")
+        ->orWhere('author', 'like', "%$q%")
+        ->orWhere('isbn', 'like', "%$q%")
         ->limit(10)
         ->get();
 
-        return response()->json($books);
-    }
+    return response()->json(
+        $books->map(function ($b) {
+            return [
+                'id' => $b->id,
+                'title' => $b->title,
+                'author' => $b->author ?? '',
+                'isbn' => $b->isbn ?? '',
+                'category' => $b->category ?? '',
+                'available_copies' => $b->available_copies ?? 0,
+            ];
+        })
+    );
+}
+
+
 
     /**
      * Get available copies
      */
     public function availableCopies(Request $request)
-    {
-        return BookCopy::where('book_id', $request->book_id)
+{
+    return response()->json(
+        BookCopy::where('book_id', $request->book_id)
             ->where('status', 'AVAILABLE')
-            ->get(['id', 'copy_number', 'location']);
-    }
+            ->get(['id', 'copy_number'])
+    );
+}
+
 
     /**
      * Manage copies

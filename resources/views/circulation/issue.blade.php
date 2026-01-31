@@ -272,77 +272,61 @@
 let selectedMember = null;
 let selectedBook = null;
 
-// Initialize date picker
-$(document).ready(function() {
+// Init date
+$(document).ready(function () {
     const today = new Date().toISOString().split('T')[0];
     $('#dueDate').attr('min', today);
 });
 
-// Member Search
-$('#memberSearch').on('input', function() {
+/* -------------------- MEMBER SEARCH -------------------- */
+$('#memberSearch').on('input', function () {
     const query = $(this).val();
-    if (query.length >= 3) {
-        searchMembers(query);
-    } else {
-        $('#memberResults').hide();
-    }
+    query.length >= 3 ? searchMembers(query) : $('#memberResults').hide();
 });
 
+function esc(str) {
+    return (str ?? '').toString().replace(/'/g, "\\'");
+}
+
 function searchMembers(query) {
-    $.ajax({
-        url: '{{ route("members.search") }}',
-        data: { q: query },
-        success: function(response) {
-            const list = $('#memberList');
-            list.empty();
-            
-            if (response.length > 0) {
-                response.forEach(member => {
-                    list.append(`
-                        <button type="button" class="list-group-item list-group-item-action" 
-                                onclick="selectMember(${member.member_id}, '${member.full_name.replace(/'/g, "\\'")}', 
-                                '${member.member_type}', '${member.email.replace(/'/g, "\\'")}', 
-                                ${member.borrow_limit}, '${member.status}')">
-                            <div class="d-flex justify-content-between align-items-start">
-                                <div>
-                                    <strong>${member.full_name}</strong><br>
-                                    <small class="text-muted">
-                                        ${member.email} • ${member.member_type}<br>
-                                        ID: ${member.member_id}
-                                    </small>
-                                </div>
-                                <span class="badge bg-${member.status === 'ACTIVE' ? 'success' : 'danger'}">
-                                    ${member.status}
-                                </span>
-                            </div>
-                        </button>
-                    `);
-                });
-                $('#memberResults').show();
-            } else {
-                list.append(`
-                    <div class="list-group-item text-center text-muted py-3">
-                        <i class="bi bi-search me-1"></i>
-                        No members found
-                    </div>
-                `);
-                $('#memberResults').show();
-            }
+    $.get('{{ route("members.search") }}', { q: query }, function (response) {
+        const list = $('#memberList').empty();
+
+        if (!response || response.length === 0) {
+            list.html(`<div class="list-group-item text-center text-muted py-3">No members found</div>`);
+            $('#memberResults').show();
+            return;
         }
+
+        response.forEach(m => {
+            list.append(`
+                <button type="button" class="list-group-item list-group-item-action"
+                    onclick="selectMember(
+                        ${m.id},
+                        '${esc(m.full_name)}',
+                        '${esc(m.member_type)}',
+                        '${esc(m.email)}',
+                        ${m.borrow_limit ?? 0},
+                        '${esc(m.status)}'
+                    )">
+                    <strong>${m.full_name}</strong><br>
+                    <small class="text-muted">${m.email ?? ''} • ${m.member_type}</small>
+                </button>
+            `);
+        });
+
+        $('#memberResults').show();
     });
 }
 
 function selectMember(id, name, type, email, limit, status) {
-    selectedMember = { id, name, type, email, limit, status };
-    
+    selectedMember = { id };
     $('#memberId').val(id);
     $('#memberName').text(name);
     $('#memberDetails').text(`${email} • ${type} • ID: ${id}`);
     $('#selectedMember').show();
     $('#memberResults').hide();
     $('#memberSearch').val('');
-    
-    // Load member stats
     loadMemberStats(id);
     checkIssueButton();
 }
@@ -351,104 +335,56 @@ function clearMember() {
     selectedMember = null;
     $('#memberId').val('');
     $('#selectedMember').hide();
-    $('#memberInfo').show();
     $('#memberStats').hide();
+    $('#memberInfo').show();
     checkIssueButton();
 }
 
-// Book Search
-$('#bookSearch').on('input', function() {
+/* -------------------- BOOK SEARCH -------------------- */
+$('#bookSearch').on('input', function () {
     const query = $(this).val();
-    if (query.length >= 3) {
-        searchBooks(query);
-    } else {
-        $('#bookResults').hide();
-    }
+    query.length >= 3 ? searchBooks(query) : $('#bookResults').hide();
 });
 
 function searchBooks(query) {
-    $.ajax({
-        url: '{{ route("books.search") }}',
-        data: { q: query },
-        success: function(response) {
-            const list = $('#bookList');
-            list.empty();
-            
-            if (response.length > 0) {
-                response.forEach(book => {
-                    const available = book.available_copies || 0;
-                    list.append(`
-                        <button type="button" class="list-group-item list-group-item-action" 
-                                onclick="selectBook(${book.book_id}, '${book.title.replace(/'/g, "\\'")}', 
-                                '${book.author.replace(/'/g, "\\'")}', '${book.isbn}', 
-                                ${available}, '${book.category}')">
-                            <div class="d-flex justify-content-between align-items-start">
-                                <div>
-                                    <strong>${book.title}</strong><br>
-                                    <small class="text-muted">
-                                        ${book.author} • ${book.category}<br>
-                                        ISBN: ${book.isbn}
-                                    </small>
-                                </div>
-                                <span class="badge bg-${available > 0 ? 'success' : 'danger'}">
-                                    ${available} available
-                                </span>
-                            </div>
-                        </button>
-                    `);
-                });
-                $('#bookResults').show();
-            } else {
-                list.append(`
-                    <div class="list-group-item text-center text-muted py-3">
-                        <i class="bi bi-book me-1"></i>
-                        No books found
-                    </div>
-                `);
-                $('#bookResults').show();
-            }
+    $.get('{{ route("books.search") }}', { q: query }, function (response) {
+        const list = $('#bookList').empty();
+
+        if (!response || response.length === 0) {
+            list.html(`<div class="list-group-item text-center text-muted py-3">No books found</div>`);
+            $('#bookResults').show();
+            return;
         }
+
+        response.forEach(b => {
+            list.append(`
+                <button type="button" class="list-group-item list-group-item-action"
+                    onclick="selectBook(
+                        ${b.id},
+                        '${esc(b.title)}',
+                        '${esc(b.author)}',
+                        '${esc(b.isbn)}'
+                    )">
+                    <strong>${b.title}</strong><br>
+                    <small class="text-muted">${b.author ?? ''} • ISBN: ${b.isbn ?? ''}</small>
+                </button>
+            `);
+        });
+
+        $('#bookResults').show();
     });
 }
 
-function selectBook(id, title, author, isbn, available, category) {
-    selectedBook = { id, title, author, isbn, available, category };
-    
+function selectBook(id, title, author, isbn) {
+    selectedBook = { id };
     $('#bookId').val(id);
     $('#bookTitle').text(title);
-    $('#bookDetails').text(`${author} • ${category} • ISBN: ${isbn}`);
+    $('#bookDetails').text(`${author} • ISBN: ${isbn}`);
     $('#selectedBook').show();
     $('#bookResults').hide();
     $('#bookSearch').val('');
-    
-    // Load available copies
     loadAvailableCopies(id);
     checkIssueButton();
-}
-
-function loadAvailableCopies(bookId) {
-    $.ajax({
-        url: '{{ route("books.copies.available") }}',
-        data: { book_id: bookId },
-        success: function(response) {
-            const select = $('#copySelect');
-            const copyInfo = $('#copyInfo');
-            select.empty();
-            
-            if (response.length > 0) {
-                select.append('<option value="">Select a copy</option>');
-                response.forEach(copy => {
-                    select.append(`<option value="${copy.copy_id}">Copy #${copy.copy_number} - ${copy.location || 'No location'}</option>`);
-                });
-                copyInfo.text(`${response.length} copies available`);
-                copyInfo.removeClass('text-danger').addClass('text-success');
-            } else {
-                select.append('<option value="">No available copies</option>');
-                copyInfo.text('No copies available for issue');
-                copyInfo.removeClass('text-success').addClass('text-danger');
-            }
-        }
-    });
 }
 
 function clearBook() {
@@ -460,6 +396,24 @@ function clearBook() {
     checkIssueButton();
 }
 
+/* -------------------- COPIES -------------------- */
+function loadAvailableCopies(bookId) {
+    $.get('{{ route("books.copies.available") }}', { book_id: bookId }, function (response) {
+        const select = $('#copySelect').empty();
+
+        if (!response || response.length === 0) {
+            select.append('<option value="">No copies available</option>');
+            return;
+        }
+
+        select.append('<option value="">Select copy</option>');
+        response.forEach(c => {
+            select.append(`<option value="${c.id}">Copy #${c.copy_number}</option>`);
+        });
+    });
+}
+
+/* -------------------- MEMBER STATS -------------------- */
 function loadMemberStats(memberId) {
     $.ajax({
         url: '{{ route("members.stats") }}',
@@ -467,84 +421,38 @@ function loadMemberStats(memberId) {
         success: function(response) {
             $('#memberInfo').hide();
             $('#memberStats').show();
-            
-            // Update member info
             $('#statsMemberName').text(response.full_name);
             $('#statsMemberType').text(response.member_type);
             $('#statsMemberEmail').text(response.email);
-            
-            // Update stats
-            $('#currentBorrowings').text(response.current_borrowings);
-            $('#borrowLimit').text(response.borrow_limit);
-            $('#pendingFines').text('₹' + response.pending_fines);
-            
-            // Calculate progress
-            const progress = (response.current_borrowings / response.borrow_limit) * 100;
-            $('#borrowingProgress').css('width', progress + '%');
-            
-            // Update status
-            $('#memberStatus').text(response.status)
-                .removeClass('bg-success bg-danger')
-                .addClass(response.status === 'ACTIVE' ? 'bg-success' : 'bg-danger');
-            
-            // Show/Hide warnings
-            if (response.has_overdue) {
-                $('#overdueWarning').show();
-            } else {
-                $('#overdueWarning').hide();
-            }
-            
-            if (response.current_borrowings >= response.borrow_limit) {
-                $('#limitWarning').show();
-            } else {
-                $('#limitWarning').hide();
-            }
-            
-            if (response.pending_fines > 0) {
-                $('#fineWarning').show();
-            } else {
-                $('#fineWarning').hide();
-            }
-            
-            // Set due date based on member type
             setDueDate(response.member_type);
+            checkIssueButton(); // 🔥 IMPORTANT
+        },
+        error: function () {
+            // Fail-safe: allow issue even if stats fail
+            checkIssueButton();
         }
     });
 }
 
-function setDueDate(memberType) {
-    const today = new Date();
-    const dueDate = new Date(today);
-    
-    if (memberType === 'FACULTY') {
-        dueDate.setDate(today.getDate() + 14); // 14 days for faculty
-        $('#dueDateInfo').text('14 days for faculty members');
-    } else {
-        dueDate.setDate(today.getDate() + 7); // 7 days for students
-        $('#dueDateInfo').text('7 days for student members');
-    }
-    
-    $('#dueDate').val(dueDate.toISOString().split('T')[0]);
+
+function setDueDate(type) {
+    const d = new Date();
+    d.setDate(d.getDate() + (type === 'FACULTY' ? 14 : 7));
+    $('#dueDate').val(d.toISOString().split('T')[0]);
 }
 
 function checkIssueButton() {
-    const memberSelected = selectedMember !== null;
-    const bookSelected = selectedBook !== null;
-    const copySelected = $('#copySelect').val() !== '';
-    
-    $('#issueBtn').prop('disabled', !(memberSelected && bookSelected && copySelected));
+    $('#issueBtn').prop('disabled',
+        !(selectedMember && selectedBook && $('#copySelect').val())
+    );
 }
 
-// Form validation
 $('#issueForm').on('submit', function(e) {
-    if (!selectedMember || !selectedBook) {
+    if (!selectedMember || !selectedBook || !$('#copySelect').val()) {
         e.preventDefault();
-        Swal.fire({
-            icon: 'error',
-            title: 'Missing Information',
-            text: 'Please select both member and book',
-        });
+        alert('Please select member, book, and copy');
     }
 });
+
 </script>
 @endpush

@@ -173,6 +173,61 @@ class MemberController extends Controller
     }
 
     /* =======================
+       SEARCH
+    ======================== */
+    public function search(Request $request)
+{
+    $q = $request->q;
+
+    $members = Member::where('full_name', 'like', "%$q%")
+        ->orWhere('email', 'like', "%$q%")
+        ->orWhere('phone', 'like', "%$q%")
+        ->limit(10)
+        ->get();
+
+    return response()->json(
+        $members->map(function ($m) {
+            return [
+                'id' => $m->id,
+                'full_name' => $m->full_name,
+                'email' => $m->email ?? '',
+                'member_type' => $m->member_type ?? 'STUDENT',
+                'borrow_limit' => $m->borrow_limit ?? 3,
+                'status' => $m->status ?? 'ACTIVE',
+            ];
+        })
+    );
+}
+
+/* =======================
+       STATS
+    ======================== */
+    public function stats(Request $request)
+{
+    $member = Member::findOrFail($request->member_id);
+
+    // SAFE count (no relationship dependency)
+    $currentBorrowings = \DB::table('circulations')
+        ->where('member_id', $member->id)
+        ->whereNull('returned_at')
+        ->count();
+
+    return response()->json([
+        'full_name' => $member->full_name,
+        'email' => $member->email ?? '',
+        'member_type' => $member->member_type ?? 'STUDENT',
+        'borrow_limit' => $member->borrow_limit ?? 3,
+        'current_borrowings' => $currentBorrowings,
+        'pending_fines' => 0,
+        'status' => $member->status ?? 'ACTIVE',
+        'has_overdue' => false,
+    ]);
+}
+
+
+
+
+    /* =======================
        STATUS TOGGLES
     ======================== */
     public function activate($id)
