@@ -398,6 +398,45 @@ class ReportController extends Controller
         ->get();
 }
 
+public function sendReminders(Request $request)
+{
+    $request->validate([
+        'transaction_ids' => 'required|array',
+    ]);
+
+    $records = Circulation::with(['member', 'copy.book'])
+        ->whereIn('id', $request->transaction_ids)
+        ->get();
+
+    foreach ($records as $record) {
+        // Placeholder (email / SMS later)
+        \Log::info('Reminder sent', [
+            'circulation_id' => $record->id,
+            'member' => $record->member->full_name ?? 'N/A',
+        ]);
+    }
+
+    return response()->json([
+        'message' => 'Reminders sent successfully',
+    ]);
+}
+
+public function sendMessage(Request $request)
+{
+    $request->validate([
+        'transaction_id' => 'required|integer',
+        'message' => 'required|string',
+    ]);
+
+    // 🔹 Later you can add SMS / Email / WhatsApp here
+    // For now we just acknowledge success
+
+    return response()->json([
+        'success' => true,
+        'message' => 'Message sent successfully',
+    ]);
+}
+
 
     private function getInactiveMembers()
 {

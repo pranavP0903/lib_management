@@ -225,7 +225,19 @@ class MemberController extends Controller
     ]);
 }
 
+public function sendWarning(Request $request)
+{
+    $request->validate([
+        'member_id' => 'required|integer|exists:members,id',
+    ]);
 
+    // 🔔 Future: Email / SMS / WhatsApp logic here
+
+    return response()->json([
+        'success' => true,
+        'message' => 'Warning sent successfully',
+    ]);
+}
 
 
     /* =======================

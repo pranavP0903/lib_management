@@ -66,7 +66,12 @@ Route::patch('/members/{member}/activate', [MemberController::class, 'activate']
 Route::patch('/members/{member}/deactivate', [MemberController::class, 'deactivate'])
     ->name('members.deactivate');
 
+/* ✅ ADD THIS */
+Route::post('/members/send-warning', [MemberController::class, 'sendWarning'])
+    ->name('members.send-warning');
+
 Route::resource('members', MemberController::class);
+
 
 /*
 |--------------------------------------------------------------------------
@@ -143,11 +148,30 @@ Route::post('/fines/apply-bulk', [FineController::class, 'applyBulk'])
 |--------------------------------------------------------------------------
 */
 Route::prefix('reports')->name('reports.')->group(function () {
-    Route::get('/', [ReportController::class, 'index'])->name('index');
-    Route::get('/circulation', [ReportController::class, 'circulation'])->name('circulation');
-    Route::get('/overdue', [ReportController::class, 'overdue'])->name('overdue');
-    Route::get('/member-activity', [ReportController::class, 'memberActivity'])->name('member-activity');
-    Route::get('/inventory', [ReportController::class, 'inventory'])->name('inventory');
+
+    Route::get('/', [ReportController::class, 'index'])
+        ->name('index');
+
+    Route::get('/circulation', [ReportController::class, 'circulation'])
+        ->name('circulation');
+
+    Route::get('/overdue', [ReportController::class, 'overdue'])
+        ->name('overdue');
+
+    Route::get('/member-activity', [ReportController::class, 'memberActivity'])
+        ->name('member-activity');
+
+    Route::get('/inventory', [ReportController::class, 'inventory'])
+        ->name('inventory');
+
+    // ✅ FIXED SEND REMINDERS ROUTE
+    Route::post('/send-reminders', [ReportController::class, 'sendReminders'])
+        ->name('send-reminders');
+
+    Route::post('/send-message', [ReportController::class, 'sendMessage'])
+        ->name('send-message');
+
+    
 });
 
 /*
