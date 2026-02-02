@@ -9,6 +9,8 @@ use App\Models\Fine;
 use App\Models\BookCopy;
 use App\Models\LibrarySetting;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 
 class ReportController extends Controller
 {
@@ -199,48 +201,163 @@ class ReportController extends Controller
        HELPERS
     ======================== */
     private function calculateCirculationStats($items)
-    {
-        return [
-            'student_issues' =>
-                $items->where('member.member_type', 'STUDENT')->count(),
-            'faculty_issues' =>
-                $items->where('member.member_type', 'FACULTY')->count(),
-        ];
-    }
+{
+    $total = $items->count();
 
-    private function getTopBooks($start, $end)
-    {
-        return Book::leftJoin('book_copies', 'books.book_id', '=', 'book_copies.book_id')
-            ->leftJoin('circulation', 'book_copies.copy_id', '=', 'circulation.copy_id')
-            ->whereBetween('circulation.issue_date', [$start, $end])
-            ->selectRaw('books.*, COUNT(circulation.id) as issue_count')
-            ->groupBy('books.book_id')
-            ->orderByDesc('issue_count')
-            ->limit(10)
-            ->get();
-    }
+    $studentItems = $items->where('member.member_type', 'STUDENT');
+    $facultyItems = $items->where('member.member_type', 'FACULTY');
 
-    private function getTopMembers($start, $end)
-    {
-        return Member::leftJoin('circulation', 'members.member_id', '=', 'circulation.member_id')
-            ->whereBetween('circulation.issue_date', [$start, $end])
-            ->selectRaw('members.*, COUNT(circulation.id) as issue_count')
-            ->groupBy('members.member_id')
-            ->orderByDesc('issue_count')
-            ->limit(10)
-            ->get();
-    }
+    $studentIssues = $studentItems->count();
+    $facultyIssues = $facultyItems->count();
+
+    return [
+        // Counts
+        'student_issues' => $studentIssues,
+        'faculty_issues' => $facultyIssues,
+
+        // Percentages (SAFE)
+        'student_percentage' =>
+            $total > 0 ? round(($studentIssues / $total) * 100, 1) : 0,
+
+        'faculty_percentage' =>
+            $total > 0 ? round(($facultyIssues / $total) * 100, 1) : 0,
+
+        // Average durations
+        'student_avg_duration' =>
+            $studentItems->avg('loan_duration')
+                ? round($studentItems->avg('loan_duration'), 1)
+                : 0,
+
+        'faculty_avg_duration' =>
+            $facultyItems->avg('loan_duration')
+                ? round($facultyItems->avg('loan_duration'), 1)
+                : 0,
+    ];
+}
+
+
+    private function getTopBooks(Carbon $start, Carbon $end)
+{
+    return DB::table('books')
+        ->join('book_copies', 'books.id', '=', 'book_copies.book_id')
+        ->join('circulation', 'book_copies.id', '=', 'circulation.copy_id')
+        ->whereBetween('circulation.issue_date', [$start, $end])
+        ->select(
+            'books.id',
+            'books.title',
+            'books.author',
+            DB::raw('COUNT(circulation.id) as issue_count')
+        )
+        ->groupBy('books.id', 'books.title', 'books.author')
+        ->orderByDesc('issue_count')
+        ->limit(10)
+        ->get();
+}
+
+
+    private function getTopMembers(Carbon $start, Carbon $end)
+{
+    return DB::table('members')
+        ->join('circulation', 'members.id', '=', 'circulation.member_id')
+        ->whereBetween('circulation.issue_date', [$start, $end])
+        ->select(
+            'members.id',
+            'members.full_name',
+            'members.member_type',
+            DB::raw('COUNT(circulation.id) as issue_count')
+        )
+        ->groupBy('members.id', 'members.full_name', 'members.member_type')
+        ->orderByDesc('issue_count')
+        ->limit(10)
+        ->get();
+}
+
+
 
     private function analyzeOverdueReport($records)
-    {
-        return [
-            'total' => $records->count(),
-            'students' =>
-                $records->where('member.member_type', 'STUDENT')->count(),
-            'faculty' =>
-                $records->where('member.member_type', 'FACULTY')->count(),
-        ];
-    }
+{
+    $total = $records->count();
+
+    /* =====================
+       MEMBER TYPE ANALYSIS
+    ====================== */
+    $students = $records->where('member.member_type', 'STUDENT');
+    $faculty  = $records->where('member.member_type', 'FACULTY');
+
+    /* =====================
+       DURATION BUCKETS
+    ====================== */
+    $week1 = $records->whereBetween('overdue_days', [1, 7]);
+    $week2 = $records->whereBetween('overdue_days', [8, 14]);
+    $month1 = $records->whereBetween('overdue_days', [15, 30]);
+    $monthPlus = $records->where('overdue_days', '>', 30);
+
+    return [
+
+        /* ===== MEMBER TYPE ===== */
+        'students' => [
+            'count' => $students->count(),
+            'percentage' => $total > 0
+                ? round(($students->count() / $total) * 100, 1)
+                : 0,
+            'avg_days' => $students->avg('overdue_days')
+                ? round($students->avg('overdue_days'), 1)
+                : 0,
+            'total_fines' => $students->sum('calculated_fine'),
+        ],
+
+        'faculty' => [
+            'count' => $faculty->count(),
+            'percentage' => $total > 0
+                ? round(($faculty->count() / $total) * 100, 1)
+                : 0,
+            'avg_days' => $faculty->avg('overdue_days')
+                ? round($faculty->avg('overdue_days'), 1)
+                : 0,
+            'total_fines' => $faculty->sum('calculated_fine'),
+        ],
+
+        /* ===== DURATION ANALYSIS ===== */
+        'duration' => [
+            'week1' => [
+                'count' => $week1->count(),
+                'percentage' => $total > 0
+                    ? round(($week1->count() / $total) * 100, 1)
+                    : 0,
+                'avg_fine' => $week1->avg('calculated_fine')
+                    ? round($week1->avg('calculated_fine'), 2)
+                    : 0,
+            ],
+            'week2' => [
+                'count' => $week2->count(),
+                'percentage' => $total > 0
+                    ? round(($week2->count() / $total) * 100, 1)
+                    : 0,
+                'avg_fine' => $week2->avg('calculated_fine')
+                    ? round($week2->avg('calculated_fine'), 2)
+                    : 0,
+            ],
+            'month1' => [
+                'count' => $month1->count(),
+                'percentage' => $total > 0
+                    ? round(($month1->count() / $total) * 100, 1)
+                    : 0,
+                'avg_fine' => $month1->avg('calculated_fine')
+                    ? round($month1->avg('calculated_fine'), 2)
+                    : 0,
+            ],
+            'month_plus' => [
+                'count' => $monthPlus->count(),
+                'percentage' => $total > 0
+                    ? round(($monthPlus->count() / $total) * 100, 1)
+                    : 0,
+                'avg_fine' => $monthPlus->avg('calculated_fine')
+                    ? round($monthPlus->avg('calculated_fine'), 2)
+                    : 0,
+            ],
+        ],
+    ];
+}
 
     private function getRepeatOffenders($records)
     {
@@ -263,24 +380,28 @@ class ReportController extends Controller
         ];
     }
 
-    private function getTopPerformers($start, $end)
-    {
-        return Member::leftJoin('circulation', 'members.member_id', '=', 'circulation.member_id')
-            ->whereBetween('circulation.issue_date', [$start, $end])
-            ->whereNotNull('circulation.return_date')
-            ->selectRaw('members.*, COUNT(circulation.id) as total_loans')
-            ->groupBy('members.member_id')
-            ->orderByDesc('total_loans')
-            ->limit(10)
-            ->get();
-    }
+    private function getTopPerformers(Carbon $start, Carbon $end)
+{
+    return DB::table('members')
+        ->join('circulation', 'members.id', '=', 'circulation.member_id')
+        ->whereBetween('circulation.issue_date', [$start, $end])
+        ->whereNotNull('circulation.return_date')
+        ->select(
+            'members.id',
+            'members.full_name',
+            'members.member_type',
+            DB::raw('COUNT(circulation.id) as total_loans')
+        )
+        ->groupBy('members.id', 'members.full_name', 'members.member_type')
+        ->orderByDesc('total_loans')
+        ->limit(10)
+        ->get();
+}
+
 
     private function getInactiveMembers()
-    {
-        return Member::leftJoin('circulation', 'members.member_id', '=', 'circulation.member_id')
-            ->groupBy('members.member_id')
-            ->havingRaw('MAX(circulation.issue_date) IS NULL')
-            ->limit(20)
-            ->get();
-    }
+{
+    return Member::doesntHave('circulations')->limit(20)->get();
+}
+
 }

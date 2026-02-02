@@ -86,6 +86,16 @@ class Circulation extends Model
         return now()->diffInDays($this->due_date);
     }
 
+    public function getLoanDurationAttribute()
+{
+    if (!$this->return_date) {
+        return now()->diffInDays($this->issue_date);
+    }
+
+    return $this->return_date->diffInDays($this->issue_date);
+}
+
+
     public function getCalculatedFineAttribute(): int
     {
         if (!$this->is_overdue) {

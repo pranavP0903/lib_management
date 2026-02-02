@@ -23,7 +23,7 @@
                 <div class="d-flex justify-content-between">
                     <div>
                         <h6 class="card-title text-white-50">Total Overdue</h6>
-                        <h2 class="mb-0">{{ $overdue->count() }}</h2>
+                        <h2 class="mb-0">{{ $overdues->count() }}</h2>
                     </div>
                     <i class="bi bi-exclamation-triangle fs-1 text-white-50"></i>
                 </div>
@@ -103,7 +103,7 @@
                     </tr>
                 </thead>
                 <tbody>
-                    @foreach($overdue as $borrowing)
+                    @foreach($overdues as $borrowing)
                     <tr>
                         <td>
                             <input type="checkbox" name="borrowing_select" value="{{ $borrowing->transaction_id }}">
@@ -280,7 +280,7 @@ Library Management
                                 </tr>
                             </thead>
                             <tbody>
-                                @foreach($overdue as $borrowing)
+                                @foreach($overdues as $borrowing)
                                 <tr>
                                     <td>
                                         <input type="checkbox" name="borrowing_ids[]" value="{{ $borrowing->transaction_id }}" checked>

@@ -31,6 +31,12 @@ Route::get('/books/copies/available', [BookController::class, 'availableCopies']
 Route::get('/books/copies', [BookController::class, 'copies'])
     ->name('books.copies');
 
+Route::post('/books/copies/bulk', [BookController::class, 'storeCopies'])
+    ->name('books.copies.bulk');
+
+Route::post('/books/copies/bulk-update', [BookController::class, 'bulkUpdateCopies'])
+    ->name('books.copies.bulk-update');
+
 // Book copies CRUD (manage copies of a book)
 Route::post('/books/{book}/copies', [BookController::class, 'storeCopy'])
     ->name('books.copies.store');
@@ -86,6 +92,12 @@ Route::prefix('circulation')->name('circulation.')->group(function () {
 
     Route::get('/overdue', [CirculationController::class, 'overdue'])
         ->name('overdue');
+
+    Route::post('/send-overdue-alerts', [CirculationController::class, 'sendOverdueAlerts'])
+    ->name('send-overdue-alerts');
+
+    Route::post('/send-message', [CirculationController::class, 'sendMessage'])
+    ->name('send-message');
 
     Route::post('/renew/{circulation}', [CirculationController::class, 'renew'])
         ->name('renew');

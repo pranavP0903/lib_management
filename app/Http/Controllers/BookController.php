@@ -162,6 +162,40 @@ class BookController extends Controller
         ));
     }
 
+    public function storeCopies(Request $request)
+{
+    $request->validate([
+        'book_id' => 'required|exists:books,id',
+        'copies'  => 'required|integer|min:1|max:50',
+    ]);
+
+    for ($i = 1; $i <= $request->copies; $i++) {
+        BookCopy::create([
+            'book_id' => $request->book_id,
+            'status'  => 'AVAILABLE',
+        ]);
+    }
+
+    return redirect()
+        ->route('books.copies', ['book_id' => $request->book_id])
+        ->with('success', 'Book copies added successfully.');
+}
+
+public function bulkUpdateCopies(Request $request)
+{
+    $request->validate([
+        'copy_ids' => 'required|array',
+        'status'   => 'required|in:AVAILABLE,ISSUED,LOST,DAMAGED',
+    ]);
+
+    BookCopy::whereIn('id', $request->copy_ids)
+        ->update([
+            'status' => $request->status,
+        ]);
+
+    return back()->with('success', 'Book copies updated successfully.');
+}
+
     /**
      * Edit form
      */
